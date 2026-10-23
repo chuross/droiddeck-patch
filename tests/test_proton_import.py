@@ -275,7 +275,10 @@ class ProtonImportIntegrationTest(ProtonImportTest):
         source = Path(os.environ["DROIDDECK_PATCH_SOURCE"])
         launcher = source / "app/src/main/java/com/droiddeck/launcher"
         menu = (launcher / "ProtonMenu.kt").read_text()
-        activity = (launcher / "MainActivity.kt").read_text()
+        activity_path = launcher / "FrontEndActivity.kt"
+        if not activity_path.exists():
+            activity_path = launcher / "MainActivity.kt"
+        activity = activity_path.read_text()
         self.assertIn("ProtonMenu(this, ui) { components.refreshComponents() }", activity)
         for operation in ("importProton", "removeImportedProton", "installProton", "removeProton"):
             body = menu.split("fun " + operation + "(", 1)[1].split("\n    fun ", 1)[0].split("\n    private fun ", 1)[0]

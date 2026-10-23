@@ -31,6 +31,8 @@ class LaunchIntegrationTest(unittest.TestCase):
         attempts = []
 
         def helper(path):
+            if Path(path).name == "droiddeck-xbox":
+                return {"launch": lambda command, env: None}
             return {"prepare": self.fonts}
 
         def execute(binary, command, env):
