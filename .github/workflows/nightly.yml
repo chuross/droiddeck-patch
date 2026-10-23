@@ -39,7 +39,7 @@ jobs:
       - name: Helper and automation tests
         run: |
           python3 -m unittest discover -s .github -p 'test_nightly_release.py' -v
-          for suite in prepare jp_fonts proton_import launch_integration release_automation; do
+          for suite in prepare proton_import launch_integration release_automation; do
             python3 -m unittest discover -s tests -p "test_${suite}.py" -v
           done
       - name: Resolve upstream main
@@ -53,7 +53,7 @@ jobs:
           python3 tools/prepare.py --base "${{ steps.plan.outputs.base }}" --version-code "$JP_VERSION_CODE"
           bash -n build/DroidDeck/tools/linuxfs/overlay/usr/local/bin/droiddeck-session
           python3 -m py_compile build/DroidDeck/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env
-          for suite in prepare jp_fonts proton_import launch_integration; do
+          for suite in prepare proton_import launch_integration; do
             python3 -m unittest discover -s tests -p "test_${suite}.py" -v
           done
           python3 build/DroidDeck/tools/tests/test_game_environment.py
@@ -89,6 +89,17 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;$DROIDDECK_NDK_VERSION" "cmake;3.22.1"
           sudo apt-get update
           sudo apt-get install -y zstd
+      - name: Prepare native cross-compiler image
+        working-directory: source/build/DroidDeck
+        run: |
+          # build_local.sh uses the ECR alias for the official Debian i386 compiler base.
+          # Preload the same official image from Docker Hub to avoid ECR's anonymous quota.
+          docker pull --platform linux/amd64 docker.io/library/debian:bullseye
+          docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
+          docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
+      - name: Native components and release APK build
+        working-directory: source/build/DroidDeck
+        run: bash tools/build_local.sh
       - name: Android unit tests (including test compilation)
         working-directory: source/build/DroidDeck
         run: |
@@ -106,7 +117,7 @@ jobs:
           GRADLE
           ./gradlew testDebugUnitTest --console=plain -PskipRust=true -PndkVersion="$DROIDDECK_NDK_VERSION" --init-script "$RUNNER_TEMP/droiddeck-tests.gradle"
       - name: Preserve failed Android test reports
-        if: failure() && steps.plan.outputs.build == 'true'
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: android-test-reports
@@ -114,17 +125,6 @@ jobs:
             source/build/DroidDeck/app/build/reports/tests/
             source/build/DroidDeck/app/build/test-results/
           retention-days: 3
-      - name: Prepare native cross-compiler image
-        working-directory: source/build/DroidDeck
-        run: |
-          # build_local.sh uses the ECR alias for the official Debian i386 compiler base.
-          # Preload the same official image from Docker Hub to avoid ECR's anonymous quota.
-          docker pull --platform linux/amd64 docker.io/library/debian:bullseye
-          docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
-          docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
-      - name: Native components and release APK build
-        working-directory: source/build/DroidDeck
-        run: bash tools/build_local.sh
       - name: Prepare APK and local provenance
         run: |
           mkdir -p dist

@@ -5,7 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 SOURCE = os.environ.get("DROIDDECK_PATCH_SOURCE")
 
@@ -24,16 +24,13 @@ class LaunchIntegrationTest(unittest.TestCase):
         self.module = runpy.run_path(str(path))
         self.globals = self.module["main"].__globals__
         self.env = {"STEAM_COMPAT_DATA_PATH": str(self.root / "compatdata/123")}
-        self.fonts = Mock(return_value=True)
 
     def run_launch(self, fallback):
         chosen = ["selected-proton", "waitforexitandrun", "game.exe"]
         attempts = []
 
         def helper(path):
-            if Path(path).name == "droiddeck-xbox":
-                return {"launch": lambda command, env: None}
-            return {"prepare": self.fonts}
+            return {"launch": lambda command, env: None}
 
         def execute(binary, command, env):
             attempts.append((binary, command, env))
@@ -54,24 +51,6 @@ class LaunchIntegrationTest(unittest.TestCase):
                 self.module["main"]()
         return attempts
 
-    def test_fonts_use_selected_proton_and_effective_environment(self):
-        attempts = self.run_launch(False)
-        self.assertEqual(len(attempts), 1)
-        command, env = self.fonts.call_args.args
-        self.assertEqual(command[0], "selected-proton")
-        self.assertEqual(env["BL_SYNC_PACK"], "selected")
-        self.assertEqual(command, attempts[0][1])
-        self.assertEqual(env, attempts[0][2])
-
-    def test_stock_fallback_also_prepares_its_own_proton(self):
-        attempts = self.run_launch(True)
-        self.assertEqual(len(attempts), 2)
-        self.assertEqual(self.fonts.call_count, 2)
-        command, env = self.fonts.call_args.args
-        self.assertEqual(command[0], "stock-proton")
-        self.assertNotIn("BL_SYNC_PACK", env)
-        self.assertEqual(command, attempts[1][1])
-
 
     def test_proton_logs_follow_each_session_and_preserve_manual_toggle(self):
         for session, flag in (("first session", "1"), ("next session", "0")):
@@ -82,7 +61,6 @@ class LaunchIntegrationTest(unittest.TestCase):
                 attempts = self.run_launch(False)
                 self.assertEqual(attempts[0][2]["PROTON_LOG_DIR"], directory)
                 self.assertEqual(attempts[0][2]["PROTON_LOG"], flag)
-                self.assertEqual(self.fonts.call_args.args[1]["PROTON_LOG_DIR"], directory)
 
     def test_logging_stays_disabled_by_default_in_selected_and_stock_proton(self):
         self.env["BL_DEBUG_DIR"] = str(self.root / "session")
@@ -120,8 +98,7 @@ class LaunchIntegrationTest(unittest.TestCase):
                 directory.mkdir()
                 environment = dict(os.environ, **self.env, HOME=str(self.root),
                                    BL_DEBUG_DIR=str(directory), PROTON_LOG=flag,
-                                   PROTON_LOG_DIR=str(self.root / "stale session"),
-                                   DROIDDECK_PATCH_FONTS="0")
+                                   PROTON_LOG_DIR=str(self.root / "stale session"))
                 subprocess.run([sys.executable, str(script), str(proton), "waitforexitandrun", "game.exe"],
                                env=environment, check=True, capture_output=True)
                 log = directory / "steam-123.log"

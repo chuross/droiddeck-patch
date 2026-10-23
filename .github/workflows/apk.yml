@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - 'tools/**'
-      - 'overlay/japanese-fonts/**'
-      - 'overlay/offline-mode/**'
       - 'overlay/proton-logs/**'
       - 'overlay/proton-import/**'
       - 'upstream.lock.json'
@@ -102,6 +100,19 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0" "ndk;$DROIDDECK_NDK_VERSION" "cmake;3.22.1"
           sudo apt-get update
           sudo apt-get install -y zstd
+      - name: Prepare native cross-compiler image
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source/build/DroidDeck
+        run: |
+          # build_local.sh uses the ECR alias for the official Debian i386 compiler base.
+          # Preload the same official image from Docker Hub to avoid ECR's anonymous quota.
+          docker pull --platform linux/amd64 docker.io/library/debian:bullseye
+          docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
+          docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
+      - name: Native components and release APK build
+        if: steps.plan.outputs.build == 'true'
+        working-directory: source/build/DroidDeck
+        run: bash tools/build_local.sh
       - name: Android unit tests (including test compilation)
         if: steps.plan.outputs.build == 'true'
         working-directory: source/build/DroidDeck
@@ -128,19 +139,6 @@ jobs:
             source/build/DroidDeck/app/build/reports/tests/
             source/build/DroidDeck/app/build/test-results/
           retention-days: 3
-      - name: Prepare native cross-compiler image
-        if: steps.plan.outputs.build == 'true'
-        working-directory: source/build/DroidDeck
-        run: |
-          # build_local.sh uses the ECR alias for the official Debian i386 compiler base.
-          # Preload the same official image from Docker Hub to avoid ECR's anonymous quota.
-          docker pull --platform linux/amd64 docker.io/library/debian:bullseye
-          docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
-          docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
-      - name: Native components and release APK build
-        if: steps.plan.outputs.build == 'true'
-        working-directory: source/build/DroidDeck
-        run: bash tools/build_local.sh
       - name: Prepare APK and local provenance
         if: steps.plan.outputs.build == 'true'
         run: |
