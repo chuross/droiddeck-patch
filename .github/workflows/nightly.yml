@@ -97,6 +97,10 @@ jobs:
           docker pull --platform linux/amd64 docker.io/library/debian:bullseye
           docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
           docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
+      - name: Enable ARM64 containers for the Xbox backend
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+        with:
+          platforms: arm64
       - name: Native components and release APK build
         working-directory: source/build/DroidDeck
         run: bash tools/build_local.sh
