@@ -20,7 +20,7 @@ class UpstreamPacksTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         subprocess.run(["git", "init", "-q", str(self.root)], check=True)
-        for name in ("xbox", "comet"):
+        for name in ("xbox", "comet", "proot"):
             directory = self.root / "tools" / name
             directory.mkdir(parents=True)
             (directory / "build.sh").write_text("source fixture\n")
@@ -41,6 +41,35 @@ class UpstreamPacksTest(unittest.TestCase):
         (self.root / "tools/local-cross.Dockerfile").write_text("new compiler\n")
         self.assertFalse(packs.source_matches(self.root, self.revision, "comet"))
         self.assertTrue(packs.source_matches(self.root, self.revision, "xbox"))
+
+    def test_proot_ignores_only_the_independent_fastpath_preload(self):
+        directory = self.root / "tools/proot"
+        (directory / "fastpath").mkdir()
+        (directory / "fastpath/fastpath.c").write_text("independent preload")
+        self.assertTrue(packs.source_matches(self.root, self.revision, "proot"))
+        (directory / "new.patch").touch()
+        self.assertFalse(packs.source_matches(self.root, self.revision, "proot"))
+        (directory / "build.sh").write_text("use fastpath in PRoot too")
+        with self.assertRaisesRegex(RuntimeError, "PRoot build inputs changed"):
+            packs.source_matches(self.root, self.revision, "proot")
+
+    def test_installed_proot_passes_upstream_input_and_output_checks(self):
+        (self.root / "tools/build_local.sh").write_text(
+            'proot_sources=$(cd "${repo_root}/tools/proot" && find . -type f ! -name \'*.pyc\' | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -d\' \' -f1)\n'
+            'proot_inputs=$(printf \'%s\\n\' "${proot_sources}" "${ndk_version}" | shasum -a 256 | cut -d\' \' -f1)\n')
+        output = self.root / "output"
+        output.mkdir()
+        for name in packs.COMPONENTS["proot"]:
+            (output / name).write_bytes(name.encode())
+        packs.install_proot(self.root, output, "27.3.13750724")
+        destination = self.root / "app/src/main/jniLibs/arm64-v8a"
+        subprocess.run(["shasum", "-a", "256", "-c", ".proot-outputs"],
+                       cwd=destination, check=True, capture_output=True)
+        expected = subprocess.check_output([
+            "bash", "-c", 'proot_sources=$(find . -type f ! -name "*.pyc" | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -d" " -f1); '
+            'printf "%s\\n" "$proot_sources" 27.3.13750724 | shasum -a 256 | cut -d" " -f1'],
+            cwd=self.root / "tools/proot", text=True).strip()
+        self.assertEqual((destination / ".proot-inputs").read_text().strip(), expected)
 
     def test_cache_key_matches_upstream_shell_with_sorted_paths_and_ignored_bytecode(self):
         directory = self.root / "tools/xbox"

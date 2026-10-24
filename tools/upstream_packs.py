@@ -12,7 +12,8 @@ import tarfile
 import tempfile
 
 REPOSITORY = "Droid-Deck/DroidDeck-Components"
-COMPONENTS = {"xbox": ("xodus-cli", "xodus-service", "version"),
+COMPONENTS = {"proot": ("libproot.so", "libproot-loader.so"),
+              "xbox": ("xodus-cli", "xodus-service", "version"),
               "comet": ("comet", "version")}
 
 
@@ -27,6 +28,11 @@ def digest(path):
 
 def source_matches(source, revision, component):
     paths = ["tools/" + component]
+    if component == "proot":
+        # The separately compiled fastpath preload is not an input to the PRoot executables.
+        if "fastpath" in (source / "tools/proot/build.sh").read_text():
+            raise RuntimeError("PRoot build inputs changed; review native pack reuse")
+        paths.append(":(exclude)tools/proot/fastpath/**")
     if component == "comet":
         paths.append("tools/local-cross.Dockerfile")
     run("git", "-C", str(source), "cat-file", "-e", revision + "^{commit}")
@@ -84,7 +90,31 @@ def unpack(archive, destination, component):
                 raise RuntimeError("Native pack does not contain ARM64 " + name)
 
 
-def prepare(source, cache, image):
+def install_proot(source, output, ndk_version):
+    script = (source / "tools/build_local.sh").read_text()
+    hooks = (
+        'proot_sources=$(cd "${repo_root}/tools/proot" && find . -type f ! -name \'*.pyc\' | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -d\' \' -f1)',
+        'proot_inputs=$(printf \'%s\\n\' "${proot_sources}" "${ndk_version}" | shasum -a 256 | cut -d\' \' -f1)',
+    )
+    if any(script.count(hook) != 1 for hook in hooks) or not re.fullmatch(r"\d+\.\d+\.\d+", ndk_version or ""):
+        raise RuntimeError("PRoot cache inputs changed or NDK version is missing")
+    directory = source / "tools/proot"
+    files = sorted((p for p in directory.rglob("*")
+                    if p.is_file() and not p.is_symlink() and p.suffix != ".pyc"),
+                   key=lambda p: os.fsencode(p.relative_to(directory).as_posix()))
+    hashes = "".join(digest(p) + "  ./" + p.relative_to(directory).as_posix() + "\n" for p in files)
+    source_hash = hashlib.sha256(hashes.encode()).hexdigest()
+    inputs = hashlib.sha256((source_hash + "\n" + ndk_version + "\n").encode()).hexdigest()
+    destination = source / "app/src/main/jniLibs/arm64-v8a"
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in COMPONENTS["proot"]:
+        shutil.copy2(output / name, destination / name)
+    outputs = "".join(digest(destination / name) + "  " + name + "\n" for name in COMPONENTS["proot"])
+    (destination / ".proot-outputs").write_text(outputs)
+    (destination / ".proot-inputs").write_text(inputs + "\n")
+
+
+def prepare(source, cache, image, ndk_version=None):
     script = (source / "tools/build_local.sh").read_text()
     hooks = {'xbox': 'xbox_key=$(inputs_hash "native-arm64-ubuntu24.04" tools/xbox)',
              'comet': 'comet_key=$(inputs_hash "${image_id}" tools/comet)'}
@@ -124,11 +154,14 @@ def prepare(source, cache, image):
                 output = temporary / "output"
                 output.mkdir()
                 unpack(archive, output, component)
-                (output / ".complete").touch()
-                # Replace only this disposable input-keyed cache, including stale local builds.
-                if target.exists():
-                    shutil.rmtree(target)
-                output.rename(target)
+                if component == "proot":
+                    install_proot(source, output, ndk_version)
+                else:
+                    (output / ".complete").touch()
+                    # Replace only this disposable input-keyed cache, including stale local builds.
+                    if target.exists():
+                        shutil.rmtree(target)
+                    output.rename(target)
             records.append({"component": component, "source": revision[1],
                             "tag": release["tag_name"], "sha256": sha})
             print("Verified upstream native pack:", component, release["tag_name"])
@@ -160,8 +193,9 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--cache", type=Path, default=Path.home() / ".cache/droiddeck-build")
     parser.add_argument("--image", default="droiddeck-local-cross:24.04-v3")
+    parser.add_argument("--ndk-version", default=os.environ.get("DROIDDECK_NDK_VERSION"))
     args = parser.parse_args()
     if args.mode == "prepare":
-        prepare(args.source.resolve(), args.cache.resolve(), args.image)
+        prepare(args.source.resolve(), args.cache.resolve(), args.image, args.ndk_version)
     else:
         verify(args.source.resolve())
