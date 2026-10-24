@@ -41,6 +41,39 @@ class UpstreamPacksTest(unittest.TestCase):
         (self.root / "tools/local-cross.Dockerfile").write_text("new compiler\n")
         self.assertFalse(packs.source_matches(self.root, self.revision, "comet"))
         self.assertTrue(packs.source_matches(self.root, self.revision, "xbox"))
+        (self.root / "tools/xbox/cache.pyc").touch()
+        self.assertTrue(packs.source_matches(self.root, self.revision, "xbox"))
+
+    def test_known_xbox_host_change_keeps_build_flags_and_runtime_inputs_strict(self):
+        directory = self.root / "tools/xbox"
+        native = 'if [[ $(uname -m) = aarch64 ]]; then\n'
+        cross = 'if [[ $(uname -m) = aarch64 || -n ${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER:-} ]]; then\n'
+        original = 'cargo build --locked --release\n' + native + 'cargo test\nfi\n'
+        changed = original.replace(native, cross)
+        (directory / "build.sh").write_text(original)
+        (directory / "build-local.sh").write_text("known native wrapper\n")
+        (directory / "backend.lock.json").write_text("original backend\n")
+        packs.run("git", "-C", str(self.root), "add", ".")
+        packs.run("git", "-C", str(self.root), "-c", "user.name=Test", "-c",
+                  "user.email=test@example.invalid", "commit", "-qm", "native wrapper")
+        revision = packs.run("git", "-C", str(self.root), "rev-parse", "HEAD")
+        old_sha = packs.digest(directory / "build-local.sh")
+        (directory / "build-local.sh").write_text("known cross wrapper\n")
+        (directory / "cross.Dockerfile").write_text("known cross compiler\n")
+        (directory / "build.sh").write_text(changed)
+        packs.run("git", "-C", str(self.root), "add", "tools/xbox/cross.Dockerfile")
+        known = {(old_sha, None), (packs.digest(directory / "build-local.sh"),
+                                  packs.digest(directory / "cross.Dockerfile"))}
+        with patch.object(packs, "XBOX_HOST_CONFIGURATIONS", known):
+            self.assertTrue(packs.source_matches(self.root, revision, "xbox"))
+            (directory / "build.sh").write_text(changed.replace("--release", "--debug"))
+            self.assertFalse(packs.source_matches(self.root, revision, "xbox"))
+            (directory / "build.sh").write_text(changed)
+            (directory / "backend.lock.json").write_text("different backend\n")
+            self.assertFalse(packs.source_matches(self.root, revision, "xbox"))
+            (directory / "backend.lock.json").write_text("original backend\n")
+            (directory / "cross.Dockerfile").write_text("unknown compiler changes\n")
+            self.assertFalse(packs.source_matches(self.root, revision, "xbox"))
 
     def test_proot_ignores_only_the_independent_fastpath_preload(self):
         directory = self.root / "tools/proot"

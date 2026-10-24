@@ -15,6 +15,11 @@ REPOSITORY = "Droid-Deck/DroidDeck-Components"
 COMPONENTS = {"proot": ("libproot.so", "libproot-loader.so"),
               "xbox": ("xodus-cli", "xodus-service", "version"),
               "comet": ("comet", "version")}
+XBOX_HOST_CONFIGURATIONS = {
+    ("87ccb068de3064309094d23223ed4847972b98e81799c8c1e7b6c11759232835", None),
+    ("bb15ae6949b7ee51b7ce7be18ea8d1785ea4382e6b8a76fc0a869c2fb0309b67",
+     "39bcfd326e2f300c3aeafc8c950b51e1e43b3c8e19a0f35f19b0e328dae3eb13"),
+}
 
 
 def run(*args):
@@ -24,6 +29,42 @@ def run(*args):
 def digest(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def tracked_inputs_equal(source, revision, paths):
+    result = subprocess.run(["git", "-C", str(source), "diff", "--quiet", revision, "--", *paths])
+    if result.returncode not in (0, 1):
+        result.check_returncode()
+    return result.returncode == 0
+
+
+def xbox_runtime_inputs_match(source, revision):
+    # Upstream #1440 changes only the host compiler and when ARM64 tests execute.
+    # Permit those exact wrappers, while comparing every production build command and input.
+    wrappers = ("tools/xbox/build-local.sh", "tools/xbox/cross.Dockerfile")
+    current = tuple(digest(source / name) if (source / name).is_file() else None for name in wrappers)
+    previous = []
+    for name in wrappers:
+        result = subprocess.run(["git", "-C", str(source), "show", revision + ":" + name],
+                                capture_output=True)
+        previous.append(hashlib.sha256(result.stdout).hexdigest() if result.returncode == 0 else None)
+    if current not in XBOX_HOST_CONFIGURATIONS or tuple(previous) not in XBOX_HOST_CONFIGURATIONS:
+        return False
+
+    def production_commands(text):
+        native = 'if [[ $(uname -m) = aarch64 ]]; then\n'
+        cross = 'if [[ $(uname -m) = aarch64 || -n ${CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUNNER:-} ]]; then\n'
+        if text.count(native) + text.count(cross) != 1:
+            return None
+        return text.replace(cross, native).strip()
+
+    build = "tools/xbox/build.sh"
+    current_build = production_commands((source / build).read_text())
+    previous_build = production_commands(run("git", "-C", str(source), "show", revision + ":" + build))
+    if current_build is None or current_build != previous_build:
+        return False
+    excluded = [":(exclude)" + path for path in (*wrappers, build)]
+    return tracked_inputs_equal(source, revision, ["tools/xbox", *excluded])
 
 
 def source_matches(source, revision, component):
@@ -36,13 +77,12 @@ def source_matches(source, revision, component):
     if component == "comet":
         paths.append("tools/local-cross.Dockerfile")
     run("git", "-C", str(source), "cat-file", "-e", revision + "^{commit}")
-    if run("git", "-C", str(source), "ls-files", "--others", "--", *paths):
+    untracked = run("git", "-C", str(source), "ls-files", "--others", "--", *paths).splitlines()
+    if any(not name.endswith(".pyc") for name in untracked):
         return False
-    result = subprocess.run(["git", "-C", str(source), "diff", "--quiet", revision,
-                             "--", *paths])
-    if result.returncode not in (0, 1):
-        result.check_returncode()
-    return result.returncode == 0
+    if tracked_inputs_equal(source, revision, paths):
+        return True
+    return component == "xbox" and xbox_runtime_inputs_match(source, revision)
 
 
 def cache_key(source, component, seed):
