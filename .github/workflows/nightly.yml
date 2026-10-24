@@ -39,7 +39,7 @@ jobs:
       - name: Helper and automation tests
         run: |
           python3 -m unittest discover -s .github -p 'test_nightly_release.py' -v
-          for suite in prepare proton_import launch_integration release_automation upstream_packs; do
+          for suite in prepare proton_import release_automation upstream_packs; do
             python3 -m unittest discover -s tests -p "test_${suite}.py" -v
           done
       - name: Resolve upstream main
@@ -53,7 +53,7 @@ jobs:
           python3 tools/prepare.py --base "${{ steps.plan.outputs.base }}" --version-code "$JP_VERSION_CODE"
           bash -n build/DroidDeck/tools/linuxfs/overlay/usr/local/bin/droiddeck-session
           python3 -m py_compile build/DroidDeck/tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env
-          for suite in prepare proton_import launch_integration; do
+          for suite in prepare proton_import; do
             python3 -m unittest discover -s tests -p "test_${suite}.py" -v
           done
           python3 build/DroidDeck/tools/tests/test_game_environment.py

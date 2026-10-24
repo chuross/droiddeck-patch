@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH_NAMES = ("proton-logs", "proton-import")
+PATCH_NAMES = ("proton-import",)
 
 
 def load_patch(name):

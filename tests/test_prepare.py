@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("prepare", ROOT / "tools/prepare.py")
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
-logs = builder.PATCHES["proton-logs"]
 imports = builder.PATCHES["proton-import"]
 
 class PrepareTest(unittest.TestCase):
@@ -53,16 +52,10 @@ class PrepareTest(unittest.TestCase):
             "droiddeck-steam-language": 'upstream language helper\n',
             "droiddeck-fonts": 'upstream Android font support\n',
             "steam-compatibility": 'upstream compatibility tools\n',
+            "droiddeck-game-env": 'upstream game environment and Proton logging\n',
         }
         for name, text in preserved.items():
             (target / name).write_text(text)
-        (target / "droiddeck-game-env").write_text(
-            'def main():\n'
-            '    launch, launch_env = select_sync(command, env, sync)\n'
-            '    if launch[0] != command[0]:\n'
-            '            record_stock(sync, launch, launch_env)\n'
-            '            os.execvpe(launch[0], launch, launch_env)\n'
-            '    os.execvpe(launch[0], launch, launch_env)\n')
         staging = self.source / "app/src/main/java/com/droiddeck/launcher/session/SessionFiles.kt"
         staging.parent.mkdir(parents=True)
         staging.write_text('        val files = arrayOf(\n        )\n')
@@ -74,15 +67,6 @@ class PrepareTest(unittest.TestCase):
         self.assertNotIn("jp_fonts", (target / "droiddeck-game-env").read_text())
         self.assertIn('applicationId "com.droiddeck.launcher.japanese"',
                       (self.source / "app/build.gradle").read_text())
-
-    def test_changed_proton_launch_hook_stops_preparation_without_partial_patch(self):
-        script = self.source / "tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env"
-        script.parent.mkdir(parents=True)
-        text = 'def main():\n    upstream_launch_changed()\n'
-        script.write_text(text)
-        with self.assertRaisesRegex(RuntimeError, "session Proton log integration"):
-            logs.patch_proton_logs(self.source)
-        self.assertEqual(script.read_text(), text)
 
 if __name__ == "__main__":
     unittest.main()
