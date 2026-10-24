@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Discover stable upstream APK releases and plan a reproducible JP build."""
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -10,6 +11,14 @@ import subprocess
 
 UPSTREAM = "Droid-Deck/DroidDeck"
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def workflow_version_code(created_at):
+    # Both APK channels share one package, so their counters must share a range.
+    code = int(datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp())
+    if not 1 <= code <= 2100000000:
+        raise RuntimeError("Invalid Android version code")
+    return code
 
 
 def gh_json(endpoint, *arguments):
@@ -104,6 +113,8 @@ def main():
         if existing.returncode and "not found" not in existing.stderr.lower() and "404" not in existing.stderr:
             raise RuntimeError("Cannot inspect existing release")
         public_rebuild(plan, args.manager, existing.stdout if not existing.returncode else "", args.run_number)
+        run = gh_json(f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}")
+        plan["version_code"] = max(plan["version_code"], workflow_version_code(run["created_at"]))
     args.output.write_text(json.dumps(plan, indent=2) + "\n")
     Path("candidate.lock.json").write_text(json.dumps(plan["lock"], indent=2) + "\n")
     if os.environ.get("GITHUB_OUTPUT"):

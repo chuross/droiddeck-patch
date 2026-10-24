@@ -106,6 +106,18 @@ class PlanTest(unittest.TestCase):
         with patch.object(planner.subprocess, "run", return_value=output):
             self.assertEqual(planner.resolve_tag("upstream", "0.3.2"), "b" * 40)
 
+    def test_stable_can_upgrade_previously_published_nightly(self):
+        code = planner.workflow_version_code("2026-10-24T05:00:00Z")
+        self.assertGreater(code, 1792806631)
+        self.assertGreater(code, 2000062)
+        self.assertEqual(code, planner.workflow_version_code("2026-10-24T14:00:00+09:00"))
+        self.assertGreater(planner.workflow_version_code("2026-10-24T05:00:01Z"), code)
+
+    def test_invalid_timestamp_cannot_produce_android_version_code(self):
+        for timestamp in ("1970-01-01T00:00:00Z", "2040-01-01T00:00:00Z"):
+            with self.subTest(timestamp=timestamp), self.assertRaises(RuntimeError):
+                planner.workflow_version_code(timestamp)
+
 
 class PublishTest(unittest.TestCase):
     def setUp(self):

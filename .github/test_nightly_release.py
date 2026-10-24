@@ -75,6 +75,8 @@ class NightlyTest(unittest.TestCase):
             nightly.plan()
         self.assertEqual(gh.call_args_list[0].args, ("api", "repos/Droid-Deck/DroidDeck/commits/main"))
         self.assertEqual(json.loads(Path("nightly-plan.json").read_text())["base"], "a" * 40)
+        self.assertEqual(json.loads(Path("nightly-plan.json").read_text())["version_code"],
+                         nightly.workflow_version_code("2026-10-15T00:00:00Z"))
 
 
 if __name__ == "__main__":

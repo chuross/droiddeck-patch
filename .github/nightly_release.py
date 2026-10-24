@@ -8,6 +8,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from release_plan import workflow_version_code
+
 UPSTREAM = "Droid-Deck/DroidDeck"
 
 
@@ -22,10 +25,7 @@ def plan():
     # A shared timestamp-based range keeps nightly upgrades monotonic across runs
     # and workflow recreation, without depending on the stable workflow counter.
     run = json.loads(gh("api", f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"))
-    from datetime import datetime
-    code = int(datetime.fromisoformat(run["created_at"].replace("Z", "+00:00")).timestamp())
-    if not 1 <= code <= 2100000000:
-        raise RuntimeError("Invalid Android version code")
+    code = workflow_version_code(run["created_at"])
     Path("nightly-plan.json").write_text(json.dumps({"base": base, "version_code": code}))
     with open(os.environ["GITHUB_OUTPUT"], "a") as output:
         output.write(f"base={base}\nversion_code={code}\n")
