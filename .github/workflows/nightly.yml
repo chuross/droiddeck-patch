@@ -39,7 +39,7 @@ jobs:
       - name: Helper and automation tests
         run: |
           python3 -m unittest discover -s .github -p 'test_nightly_release.py' -v
-          for suite in prepare proton_import launch_integration release_automation; do
+          for suite in prepare proton_import launch_integration release_automation upstream_packs; do
             python3 -m unittest discover -s tests -p "test_${suite}.py" -v
           done
       - name: Resolve upstream main
