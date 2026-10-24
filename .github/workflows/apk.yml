@@ -109,6 +109,15 @@ jobs:
           docker pull --platform linux/amd64 docker.io/library/debian:bullseye
           docker tag docker.io/library/debian:bullseye public.ecr.aws/docker/library/debian:bullseye
           docker build --platform linux/amd64 -t "$DROIDDECK_BUILD_IMAGE" -f tools/local-cross.Dockerfile .
+      - name: Reuse verified upstream native packs
+        if: steps.plan.outputs.build == 'true'
+        run: python3 tools/upstream_packs.py prepare --source build/DroidDeck --image "$DROIDDECK_BUILD_IMAGE"
+      - name: Save upstream native pack provenance
+        if: steps.plan.outputs.build == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: upstream-native-packs
+          path: source/build/DroidDeck/upstream-native-packs.json
       - name: Enable ARM64 containers for the Xbox backend
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         if: steps.plan.outputs.build == 'true'
@@ -118,6 +127,9 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         working-directory: source/build/DroidDeck
         run: bash tools/build_local.sh
+      - name: Verify pinned add-on packs are publicly available
+        if: steps.plan.outputs.build == 'true'
+        run: python3 tools/upstream_packs.py verify --source build/DroidDeck
       - name: Android unit tests (including test compilation)
         if: steps.plan.outputs.build == 'true'
         working-directory: source/build/DroidDeck
@@ -163,7 +175,7 @@ jobs:
       - name: Remove temporary build source
         if: always()
         working-directory: ${{ github.workspace }}
-        run: rm -rf source
+        run: sudo rm -rf source
 
 
 
