@@ -44,6 +44,32 @@ class UpstreamPacksTest(unittest.TestCase):
         (self.root / "tools/xbox/cache.pyc").touch()
         self.assertTrue(packs.source_matches(self.root, self.revision, "xbox"))
 
+    def test_known_comet_host_change_keeps_other_inputs_strict(self):
+        directory = self.root / "tools/comet"
+        (directory / "build-local.sh").write_text("known amd64 wrapper\n")
+        (directory / "droiddeck.patch").write_text("original patch\n")
+        packs.run("git", "-C", str(self.root), "add", ".")
+        packs.run("git", "-C", str(self.root), "-c", "user.name=Test", "-c",
+                  "user.email=test@example.invalid", "commit", "-qm", "amd64 wrapper")
+        revision = packs.run("git", "-C", str(self.root), "rev-parse", "HEAD")
+        files = [self.root / name for name in packs.COMET_HOST_FILES]
+        old = tuple(packs.digest(path) for path in files)
+        (directory / "build-local.sh").write_text("known arm64 wrapper\n")
+        (directory / "build.sh").write_text("source fixture with retries\n")
+        (self.root / "tools/local-cross.Dockerfile").write_text("arm64 aware compiler\n")
+        known = {old, tuple(packs.digest(path) for path in files)}
+        with patch.object(packs, "COMET_HOST_CONFIGURATIONS", known):
+            self.assertTrue(packs.source_matches(self.root, revision, "comet"))
+            (directory / "droiddeck.patch").write_text("different patch\n")
+            self.assertFalse(packs.source_matches(self.root, revision, "comet"))
+            (directory / "droiddeck.patch").write_text("original patch\n")
+            (directory / "build.sh").write_text("unknown build changes\n")
+            self.assertFalse(packs.source_matches(self.root, revision, "comet"))
+            (directory / "build.sh").write_text("source fixture with retries\n")
+            (self.root / "tools/local-cross.Dockerfile").write_text("unknown compiler\n")
+            self.assertFalse(packs.source_matches(self.root, revision, "comet"))
+        self.assertFalse(packs.source_matches(self.root, revision, "comet"))
+
     def test_known_xbox_host_change_keeps_build_flags_and_runtime_inputs_strict(self):
         directory = self.root / "tools/xbox"
         native = 'if [[ $(uname -m) = aarch64 ]]; then\n'

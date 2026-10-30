@@ -20,6 +20,15 @@ XBOX_HOST_CONFIGURATIONS = {
     ("bb15ae6949b7ee51b7ce7be18ea8d1785ea4382e6b8a76fc0a869c2fb0309b67",
      "39bcfd326e2f300c3aeafc8c950b51e1e43b3c8e19a0f35f19b0e328dae3eb13"),
 }
+COMET_HOST_FILES = ("tools/comet/build-local.sh", "tools/comet/build.sh", "tools/local-cross.Dockerfile")
+COMET_HOST_CONFIGURATIONS = {
+    ("1192b5fb553ec5c064eefc654ff0bb736a14ac3cb4d6fbe7baff6699c8c76c51",
+     "eefb97ecf1571a4d7c224b278c52ab4094203bcd49d2e3dbf2c33cad42486eba",
+     "b67868228b59667704e9c3335d41def2e1812e4eed167cc24ae953e9d6fa2cc4"),
+    ("982d64752050cb693a6454909323937c2693634318745821a5219629b84513ff",
+     "a11522b6fff2ace9ee687cc57fb8719e2919ed46447a6fd53e960919374f386a",
+     "b615201a4ce181b004048849861775f9f675d64cbdfc5c21af91cc9305c81dfe"),
+}
 
 
 def run(*args):
@@ -67,6 +76,24 @@ def xbox_runtime_inputs_match(source, revision):
     return tracked_inputs_equal(source, revision, ["tools/xbox", *excluded])
 
 
+def git_digest(source, revision, name):
+    result = subprocess.run(["git", "-C", str(source), "show", revision + ":" + name],
+                            capture_output=True)
+    return hashlib.sha256(result.stdout).hexdigest() if result.returncode == 0 else None
+
+
+def comet_host_inputs_match(source, revision):
+    # Upstream #1719 and #1744 change only the ARM64 host wrapper, the image's package
+    # selection on ARM64 hosts and the checksum-verified download's curl retries.
+    current = tuple(digest(source / name) if (source / name).is_file() else None
+                    for name in COMET_HOST_FILES)
+    previous = tuple(git_digest(source, revision, name) for name in COMET_HOST_FILES)
+    if current not in COMET_HOST_CONFIGURATIONS or previous not in COMET_HOST_CONFIGURATIONS:
+        return False
+    excluded = [":(exclude)" + path for path in COMET_HOST_FILES[:2]]
+    return tracked_inputs_equal(source, revision, ["tools/comet", *excluded])
+
+
 def source_matches(source, revision, component):
     paths = ["tools/" + component]
     if component == "proot":
@@ -82,6 +109,8 @@ def source_matches(source, revision, component):
         return False
     if tracked_inputs_equal(source, revision, paths):
         return True
+    if component == "comet":
+        return comet_host_inputs_match(source, revision)
     return component == "xbox" and xbox_runtime_inputs_match(source, revision)
 
 
