@@ -119,8 +119,14 @@ def unpack(archive, entries, staging):
     tree = staging / entries[0][1].parts[0]
     for member, path in entries:
         if member.issym():
+            # Python 3.13 no longer reports loops from a non-strict resolve.
+            link = staging / str(path)
             try:
-                (staging / str(path)).resolve().relative_to(tree.resolve())
+                try:
+                    resolved = link.resolve(strict=True)
+                except FileNotFoundError:
+                    resolved = link.resolve()
+                resolved.relative_to(tree.resolve())
             except (ValueError, RuntimeError, OSError):
                 fail("unsafe_archive")
 
