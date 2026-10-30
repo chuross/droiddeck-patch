@@ -1,10 +1,10 @@
 {
   "repository": "https://github.com/Droid-Deck/DroidDeck.git",
-  "base": "22eac0831d10671f6bc2ad914a93a0da5046c7df",
+  "base": "001ec02a175b094c36df0b4ba5f9c0e42c951e5b",
   "commits": [],
   "upstream_release": {
-    "id": 421212539,
-    "tag_name": "0.6.0",
-    "published_at": "2026-10-22T21:17:26Z"
+    "id": 428314706,
+    "tag_name": "0.6.7",
+    "published_at": "2026-10-29T19:37:31Z"
   }
 }
