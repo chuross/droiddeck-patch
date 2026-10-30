@@ -279,10 +279,14 @@ class ProtonImportIntegrationTest(ProtonImportTest):
         if not activity_path.exists():
             activity_path = launcher / "MainActivity.kt"
         activity = activity_path.read_text()
-        self.assertIn("ProtonMenu(this, ui) { components.refreshComponents() }", activity)
+        # Upstream refreshes components whenever a Proton operation releases the busy id.
+        self.assertIn("LaunchedEffect(protons.protonBusyId) { if (protons.protonBusyId == null) components.refreshComponents() }",
+                      activity)
         for operation in ("importProton", "removeImportedProton", "installProton", "removeProton"):
             body = menu.split("fun " + operation + "(", 1)[1].split("\n    fun ", 1)[0].split("\n    private fun ", 1)[0]
-            self.assertIn("refreshProtons()\n                onInstalledChanged()", body)
+            self.assertRegex(body, r"protonBusyId = (id|ProtonImport\.BUSY_ID)\n")
+            self.assertIn("protonBusyId = null", body)
+            self.assertIn("refreshProtons()", body)
 
     def setUp(self):
         super().setUp()
