@@ -4,8 +4,7 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parent
-PATCHES = (ROOT / "proton-import.patch", ROOT / "proton-import-nightly.patch",
-           ROOT / "proton-import-frontend.patch")
+PATCHES = (ROOT / "proton-import.patch",)
 HELPERS = ("droiddeck-proton-import",)
 ASSETS = tuple("usr/local/bin/" + name for name in HELPERS)
 KOTLIN = "app/src/main/java/com/droiddeck/launcher/session/ProtonImport.kt"
