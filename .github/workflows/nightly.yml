@@ -104,6 +104,7 @@ jobs:
         with:
           name: upstream-native-packs
           path: source/build/DroidDeck/upstream-native-packs.json
+          retention-days: 2
       - name: Enable ARM64 containers for the Xbox backend
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
@@ -137,7 +138,7 @@ jobs:
           path: |
             source/build/DroidDeck/app/build/reports/tests/
             source/build/DroidDeck/app/build/test-results/
-          retention-days: 3
+          retention-days: 2
       - name: Prepare APK and local provenance
         run: |
           mkdir -p dist

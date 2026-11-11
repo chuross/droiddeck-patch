@@ -42,6 +42,7 @@ jobs:
           path: |
             release-plan.json
             candidate.lock.json
+          retention-days: 2
 
   validate:
     needs: plan

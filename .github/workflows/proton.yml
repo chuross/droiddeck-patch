@@ -47,6 +47,7 @@ jobs:
           path: |
             proton-release-plan.json
             candidate-proton.lock.json
+          retention-days: 2
       - name: Build dependencies
         if: steps.plan.outputs.build == 'true'
         run: |
@@ -75,6 +76,7 @@ jobs:
             build/proton-ntcontext/wine-build/config.log
             build/proton-ntcontext/sdk-digests.json
           if-no-files-found: ignore
+          retention-days: 2
       - name: Remove temporary build source
         if: always()
         run: rm -rf build/proton-ntcontext
